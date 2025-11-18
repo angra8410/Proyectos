@@ -1,4 +1,4 @@
-name: 01-EDA — Ingest Spotify tracks (robust path)
+name: 01-EDA — Ingest Spotify tracks (robust path + diagnostic)
 
 on:
   workflow_dispatch:
@@ -63,6 +63,45 @@ jobs:
           MAX_TRACKS=${{ secrets.MAX_TRACKS }}
           EOF
 
+      - name: Spotify token diagnostic (do not print token)
+        env:
+          SPOTIPY_CLIENT_ID: ${{ secrets.SPOTIPY_CLIENT_ID }}
+          SPOTIPY_CLIENT_SECRET: ${{ secrets.SPOTIPY_CLIENT_SECRET }}
+        run: |
+          # install jq and curl if missing (used only for safe JSON parsing)
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -y
+            sudo apt-get install -y jq curl
+          fi
+
+          echo "Checking SPOTIPY_CLIENT_ID and SPOTIPY_CLIENT_SECRET presence (no secrets will be printed)"
+          if [ -z "$SPOTIPY_CLIENT_ID" ] || [ -z "$SPOTIPY_CLIENT_SECRET" ]; then
+            echo "ERROR: SPOTIPY_CLIENT_ID or SPOTIPY_CLIENT_SECRET is empty"
+            exit 1
+          fi
+          echo "Client ID length: ${#SPOTIPY_CLIENT_ID}"
+
+          # Request client credentials token from Spotify (diagnostic only)
+          RESP=$(curl -s -X POST -u "${SPOTIPY_CLIENT_ID}:${SPOTIPY_CLIENT_SECRET}" \
+            -d grant_type=client_credentials https://accounts.spotify.com/api/token)
+
+          if echo "$RESP" | jq -e . >/dev/null 2>&1; then
+            echo "Token response keys: $(echo "$RESP" | jq -r 'keys | join(", ")')"
+            ACCESS_TOKEN=$(echo "$RESP" | jq -r '.access_token // empty')
+            if [ -n "$ACCESS_TOKEN" ]; then
+              echo "access_token length: ${#ACCESS_TOKEN}"
+              echo "first4:last4 of token: ${ACCESS_TOKEN:0:4}...${ACCESS_TOKEN: -4}"
+            else
+              echo "No access_token in response; response was:"
+              echo "$RESP"
+              exit 1
+            fi
+          else
+            echo "Token response (non-json):"
+            echo "$RESP"
+            exit 1
+          fi
+
       - name: Locate and run ingest script
         env:
           SPOTIPY_CLIENT_ID: ${{ secrets.SPOTIPY_CLIENT_ID }}
@@ -76,8 +115,8 @@ jobs:
             exit 2
           fi
           echo "Found script at: $SCRIPT_PATH"
-          # create output dir relative to repo root (adjust if your project subfolder is different)
-          OUT_DIR="$(dirname "$SCRIPT_PATH")/../data"
+          # create output dir relative to the script location
+          OUT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)/../data"
           mkdir -p "$OUT_DIR"
           # normalize OUT_CSV path
           OUT_CSV="$OUT_DIR/spotify_tracks.csv"
