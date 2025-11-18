@@ -106,13 +106,25 @@ def chunked(iterable, n):
     for i in range(0, len(iterable), n):
         yield iterable[i:i+n]
 
-def try_audio_features(sp: Spotify, ids_batch: List[str]):
+def try_audio_features(sp: Spotify, ids_batch: List[str], retry_on_403=True):
     """Intenta obtener audio_features, con manejo de errores y diagnóstico."""
     try:
         return sp.audio_features(ids_batch)
     except SpotifyException as e:
         status = getattr(e, 'http_status', None)
         print(f"SpotifyException audio_features: status={status}, msg={e}")
+        # Si es 403 y retry_on_403=True, intentar renovar token y reintentar
+        if status == 403 and retry_on_403:
+            print("Got 403 Forbidden on audio_features, attempting to refresh token and retry...")
+            try:
+                # Crear un nuevo Spotify client con nuevo token
+                auth_manager = SpotifyClientCredentials(client_id=SPOTIPY_CLIENT_ID,
+                                                        client_secret=SPOTIPY_CLIENT_SECRET)
+                sp_new = Spotify(auth_manager=auth_manager, requests_timeout=10, retries=3)
+                # Reintentar con nuevo cliente (sin recursión infinita)
+                return sp_new.audio_features(ids_batch)
+            except Exception as e2:
+                print(f"Retry with fresh token failed: {e2}")
         return None
     except Exception as e:
         print(f"Error calling audio_features: {e}")
@@ -140,14 +152,19 @@ def fetch_tracks_and_features(sp: Spotify, track_ids: List[str]) -> pd.DataFrame
     # metadata
     for ids_batch in chunked(unique_ids, 50):
         retry = 0
-        while True:
+        max_retries = 5
+        while retry < max_retries:
             try:
                 tracks = sp.tracks(ids_batch).get('tracks', [])
                 break
             except Exception as e:
                 retry += 1
+                if retry >= max_retries:
+                    print(f"Error fetching tracks batch metadata after {max_retries} retries: {e}. Skipping batch.")
+                    tracks = []
+                    break
                 wait = min(60, 2 ** retry)
-                print(f"Error fetching tracks batch metadata: {e}. Retry in {wait}s")
+                print(f"Error fetching tracks batch metadata: {e}. Retry {retry}/{max_retries} in {wait}s")
                 time.sleep(wait)
         for t in tracks:
             if not t:
@@ -170,12 +187,12 @@ def fetch_tracks_and_features(sp: Spotify, track_ids: List[str]) -> pd.DataFrame
     # audio features: intentamos y si falla guardamos la metadata sin features
     features_rows = []
     for ids_batch in chunked(df_meta['track_id'].tolist(), 100):
-        feats = try_audio_features(sp, ids_batch)
+        feats = try_audio_features(sp, ids_batch, retry_on_403=True)
         if feats is None:
             print("Warning: audio_features batch failed for ids:", ids_batch[:5], "...")
             # intentamos en modo batch de 1 para diagnosticar
             for tid in ids_batch:
-                single = try_audio_features(sp, [tid])
+                single = try_audio_features(sp, [tid], retry_on_403=False)
                 if single:
                     features_rows.extend(single)
                 else:
