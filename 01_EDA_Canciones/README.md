@@ -1,77 +1,38 @@
-# 01 - EDA: Perfil de canciones (Spotify)
+```markdown
+# 01_EDA_Canciones — Ingest Spotify tracks
 
-Objetivo
-- Realizar un EDA reproducible con audio_features + metadata usando la Spotify API.
+Este README explica cómo ejecutar el workflow de ingestión y dónde encontrar los resultados.
 
-Entregables (MVP)
-- notebooks/eda_songs.py (celdas Jupyter)
-- src/data/spotify_tracks.csv (o instrucciones para obtenerlo)
-- src/scripts/ingest_spotify.py
-- requirements.txt
-- README con pasos para reproducir
+Cómo ejecutar el workflow manualmente (Actions)
+1. Asegúrate de que los Secrets están configurados:
+   - SPOTIPY_CLIENT_ID
+   - SPOTIPY_CLIENT_SECRET
+   - (opcional) MAX_TRACKS
 
-Estructura interna
-- src/
-  - scripts/ingest_spotify.py
-  - notebooks/eda_songs.py
-  - data/spotify_tracks.csv
+   Ve a: Settings → Secrets and variables → Actions y añade/actualiza los valores.
 
-## Cómo ejecutar el workflow de GitHub Actions
+2. En GitHub, abre la pestaña "Actions" del repositorio y selecciona
+   el workflow "01-EDA — Ingest Spotify tracks (robust path + diagnostic)".
 
-El repositorio incluye un workflow automatizado para ingestar datos de Spotify sin necesidad de configurar un entorno local.
+3. Haz clic en "Run workflow" y proporciona inputs de ejemplo:
+   - playlists: (opcional) deja en blanco o pon IDs/URLs separadas por comas
+   - artists: por ejemplo `Coldplay`
+   - max_tracks: por ejemplo `50`
 
-### Pasos para ejecutar:
+4. Ejecuta. Observa los pasos:
+   - Spotify token diagnostic: comprobadará que las secrets producen un token (no imprime el token entero).
+   - Test audio-features (diagnostic): realizará una petición a /v1/audio-features para verificar acceso.
+   - Locate and run ingest script: buscará y ejecutará `ingest_spotify.py` en el repo.
+   - Upload CSV artifact: subirá `spotify_tracks_csv` como artifact del run.
 
-1. Ve a la pestaña **Actions** en GitHub
-2. Selecciona el workflow **"01-EDA — Ingest Spotify tracks (robust path + diagnostic)"**
-3. Haz clic en **"Run workflow"** (botón derecho)
-4. Completa los inputs:
-   - **artists**: Nombres de artistas separados por comas (ejemplo: `Coldplay,Adele`)
-   - **max_tracks**: Número máximo de tracks a obtener (ejemplo: `50`)
-   - **playlists**: (Opcional) IDs o URLs de playlists de Spotify
-5. Haz clic en **"Run workflow"** (botón verde)
+Descargar resultados
+- Una vez finalizada la ejecución, en la página del run, en la sección "Artifacts" verás `spotify_tracks_csv`.
+- Descarga el ZIP y extrae `spotify_tracks.csv`.
 
-### Ejemplo de inputs recomendados:
-- `artists=Coldplay`
-- `max_tracks=50`
+Notas importantes
+- El runner es efímero: los archivos generados durante el job no aparecen automáticamente en el árbol del repo. Si quieres persistir resultados en el repo, añade un paso de commit/push con cuidado (recomiendo usar una rama `results/spotify`).
+- Si las llamadas a `/v1/audio-features` devuelven 403/401, revisa las secrets (vuelve a copiar/pegar sin saltos de línea) o regenera Client Secret en el Spotify Developer Dashboard y actualiza el secret en GitHub.
 
-### Descargar resultados:
-
-1. Una vez que el workflow termine con éxito (✓), ve a la sección **Artifacts** al final de la página del workflow run
-2. Descarga el artifact llamado **spotify_tracks_csv**
-3. Descomprime el archivo ZIP para obtener `spotify_tracks.csv`
-
-El archivo CSV contendrá las siguientes columnas principales:
-- `track_id`: ID único del track en Spotify
-- `track_name`: Nombre de la canción
-- `artist_names`: Nombres de los artistas
-- `release_date`: Fecha de lanzamiento
-- `tempo`: Tempo de la canción (BPM)
-- `danceability`: Nivel de bailabilidad (0.0 - 1.0)
-- Y otras características de audio...
-
-## Cómo empezar (local)
-
-1. Crear entorno:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate   # Windows: .\.venv\Scripts\Activate.ps1
-   pip install --upgrade pip
-   pip install -r 01_EDA_Canciones/requirements.txt
-   ```
-2. Configurar credenciales Spotify en `.env` (copia `.env.example` a `.env`)
-3. Ejecutar ingesta (ejemplo con playlist pública):
-   ```bash
-   python 01_EDA_Canciones/scr/scripts/ingest_spotify.py --artists Coldplay --out 01_EDA_Canciones/scr/data/spotify_tracks.csv --max_tracks 200
-   ```
-4. Abrir notebook:
-   ```bash
-   jupyter lab
-   # abrir 01_EDA_Canciones/notebooks/eda_songs.py
-   ```
-
-Notas
-- No subir `.env` ni datos sin sanitizar.
-- Si usas Authorization Code Flow más adelante registra redirect URI http://127.0.0.1:8888/callback en el dashboard de Spotify.
-- El workflow de GitHub Actions maneja automáticamente las credenciales mediante GitHub Secrets
-
+Si necesitas, puedo:
+- Preparar un PR que añada un paso opcional para commitear el CSV a `results/spotify`.
+- Ajustar el script si en tu repo la carpeta es `src` en vez de `scr` (actualiza el path o renombra la carpeta).
