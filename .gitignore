@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data
+src/data/*
+projects/*/src/data/*
+
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
