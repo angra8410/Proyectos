@@ -26,11 +26,12 @@ jobs:
             echo "$RESP"
             exit 1
           fi
+          # export to subsequent steps
           echo "ACCESS_TOKEN=${ACCESS_TOKEN}" >> $GITHUB_ENV
 
       - name: Diagnostic: request headers + body for audio-features and tracks
-        env:
-          ACCESS_TOKEN: ${{ env.ACCESS_TOKEN }}
+        # Do NOT reference ${{ env.ACCESS_TOKEN }} here; ACCESS_TOKEN will be available
+        # at runtime via $ACCESS_TOKEN because it was written to $GITHUB_ENV in the previous step.
         run: |
           TRACK_ID="3AJwUDP919kvQ9QcozQPxg"
           AF_URL="https://api.spotify.com/v1/audio-features/${TRACK_ID}"
