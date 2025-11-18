@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       playlists:
-        description: 'Comma-separated playlist ids (e.g. 37i9dQZF1DXcBWIGoYBM5M)'
+        description: 'Comma-separated playlist ids or URLs (e.g. 37i9dQZF1DXcBWIGoYBM5M)'
         required: false
         default: ''
       artists:
@@ -52,7 +52,7 @@ jobs:
             pip install -r requirements.txt
           else
             echo "No requirements.txt found in expected locations; installing minimal deps"
-            pip install pandas spotipy python-dotenv tqdm
+            pip install pandas spotipy python-dotenv tqdm requests
           fi
 
       - name: Create .env from secrets
@@ -102,6 +102,33 @@ jobs:
             exit 1
           fi
 
+      - name: Test audio-features with fresh token (strict)
+        env:
+          SPOTIPY_CLIENT_ID: ${{ secrets.SPOTIPY_CLIENT_ID }}
+          SPOTIPY_CLIENT_SECRET: ${{ secrets.SPOTIPY_CLIENT_SECRET }}
+        run: |
+          # ensure jq and curl available
+          if ! command -v jq >/dev/null 2>&1; then sudo apt-get update -y; sudo apt-get install -y jq curl; fi
+
+          RESP=$(curl -s -X POST -u "${SPOTIPY_CLIENT_ID}:${SPOTIPY_CLIENT_SECRET}" -d grant_type=client_credentials https://accounts.spotify.com/api/token)
+          ACCESS_TOKEN=$(echo "$RESP" | jq -r '.access_token // empty')
+          echo "Masked token info (length only): ${#ACCESS_TOKEN}"
+          if [ -z "$ACCESS_TOKEN" ]; then
+            echo "ERROR: no access_token obtained from token endpoint; response:"
+            echo "$RESP"
+            exit 1
+          fi
+
+          TRACK_ID="3AJwUDP919kvQ9QcozQPxg"
+          AF_URL="https://api.spotify.com/v1/audio-features/${TRACK_ID}"
+          HTTP_CODE=$(curl -s -o /tmp/af_out.txt -w '%{http_code}' -H "Authorization: Bearer ${ACCESS_TOKEN}" "${AF_URL}")
+          echo "Audio-features HTTP status: ${HTTP_CODE}"
+          echo "Response body (diagnostic):"
+          sed -n '1,200p' /tmp/af_out.txt
+          if [ "${HTTP_CODE}" != "200" ]; then
+            exit 1
+          fi
+
       - name: Locate and run ingest script
         env:
           SPOTIPY_CLIENT_ID: ${{ secrets.SPOTIPY_CLIENT_ID }}
@@ -118,7 +145,6 @@ jobs:
           # create output dir relative to the script location
           OUT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)/../data"
           mkdir -p "$OUT_DIR"
-          # normalize OUT_CSV path
           OUT_CSV="$OUT_DIR/spotify_tracks.csv"
           echo "Running: python $SCRIPT_PATH --playlists \"${{ github.event.inputs.playlists }}\" --artists \"${{ github.event.inputs.artists }}\" --out \"$OUT_CSV\" --max_tracks ${{ github.event.inputs.max_tracks }}"
           python "$SCRIPT_PATH" \
