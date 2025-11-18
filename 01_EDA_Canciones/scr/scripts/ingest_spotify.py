@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-Versión con diagnóstico ampliado y manejo de 403 en audio_features.
+Descarga metadata y audio_features desde Spotify y guarda CSV.
+
+Mejoras incluidas:
+ - acepta playlist IDs o URLs/URIs
+ - maneja playlists no encontradas (404) sin abortar
+ - maneja 403 en audio_features: reintento, reintento con token fresco, batch más pequeño, fallback a metadata
+ - diagnóstico seguro: imprime longitudes y mensajes, no tokens
 """
 import os
 import argparse
@@ -24,22 +30,18 @@ if not SPOTIPY_CLIENT_ID or not SPOTIPY_CLIENT_SECRET:
     raise SystemExit("Set SPOTIPY_CLIENT_ID and SPOTIPY_CLIENT_SECRET in environment or .env")
 
 def init_spotify():
-    # Diagnóstico: confirmar que las variables existen (sin imprimir valores sensibles)
-    print(f"DEBUG: SPOTIPY_CLIENT_ID present_len={len(SPOTIPY_CLIENT_ID)}")
-    print(f"DEBUG: SPOTIPY_CLIENT_SECRET present_len={len(SPOTIPY_CLIENT_SECRET)}")
     auth_manager = SpotifyClientCredentials(client_id=SPOTIPY_CLIENT_ID,
                                             client_secret=SPOTIPY_CLIENT_SECRET)
     sp = Spotify(auth_manager=auth_manager, requests_timeout=10, retries=3)
-    # Diagnóstico opcional: obtener token via curl-like (no mostrar token completo)
+    # diagnóstico: longitud de credenciales / token intento (no imprimir token)
     try:
         token_info = auth_manager.get_access_token(as_dict=True)
         if token_info and 'access_token' in token_info:
             print(f"DEBUG: Obtained access_token length={len(token_info['access_token'])}")
     except Exception as e:
-        print(f"WARNING: no token obtained via auth_manager.get_access_token(): {e}")
+        # auth_manager may change in future versions; don't print secrets
+        print(f"WARNING: could not get cached token via auth_manager: {e}")
     return sp
-
-# ... (misma lógica de extracción y helpers que tenías antes) ...
 
 def extract_playlist_id(input_str: str) -> str:
     if not input_str:
@@ -67,7 +69,7 @@ def get_playlist_track_ids(sp: Spotify, playlist_id: str, limit=1000) -> List[st
         if status == 404:
             print(f"Playlist not found (404): {pid}")
             return []
-        raise
+        return []
     except Exception as e:
         print(f"Error fetching playlist {pid}: {e}")
         return []
@@ -82,7 +84,7 @@ def get_playlist_track_ids(sp: Spotify, playlist_id: str, limit=1000) -> List[st
         try:
             results = sp.next(results)
         except Exception as e:
-            print(f"Error paginating: {e}")
+            print(f"Error paginating playlist {pid}: {e}")
             break
         for item in results.get('items', []):
             tid = item.get('track', {}).get('id')
@@ -106,42 +108,31 @@ def chunked(iterable, n):
     for i in range(0, len(iterable), n):
         yield iterable[i:i+n]
 
-def try_audio_features(sp: Spotify, ids_batch: List[str], retry_on_403=True):
-    """Intenta obtener audio_features, con manejo de errores y diagnóstico."""
+def try_audio_features_spotipy(sp: Spotify, ids_batch: List[str]):
     try:
         return sp.audio_features(ids_batch)
     except SpotifyException as e:
         status = getattr(e, 'http_status', None)
         print(f"SpotifyException audio_features: status={status}, msg={e}")
-        # Si es 403 y retry_on_403=True, intentar renovar token y reintentar
-        if status == 403 and retry_on_403:
-            print("Got 403 Forbidden on audio_features, attempting to refresh token and retry...")
-            try:
-                # Crear un nuevo Spotify client con nuevo token
-                auth_manager = SpotifyClientCredentials(client_id=SPOTIPY_CLIENT_ID,
-                                                        client_secret=SPOTIPY_CLIENT_SECRET)
-                sp_new = Spotify(auth_manager=auth_manager, requests_timeout=10, retries=3)
-                # Reintentar con nuevo cliente (sin recursión infinita)
-                return sp_new.audio_features(ids_batch)
-            except Exception as e2:
-                print(f"Retry with fresh token failed: {e2}")
         return None
     except Exception as e:
-        print(f"Error calling audio_features: {e}")
-        # intentemos con requests para capturar body si es un 403
-        try:
-            # construir token desde client credentials (requests) — no imprimir token
-            resp = requests.post(
-                "https://accounts.spotify.com/api/token",
-                data={"grant_type": "client_credentials"},
-                auth=(SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET),
-                timeout=10
-            )
-            print(f"Token endpoint status: {resp.status_code}")
-            if resp.status_code != 200:
-                print("Token endpoint response body:", resp.text)
-        except Exception as e2:
-            print("Error obtaining token via requests for diagnosis:", e2)
+        print(f"Error calling audio_features via spotipy: {e}")
+        return None
+
+def try_audio_features_direct(token: str, ids_batch: List[str]):
+    """Try audio_features using requests + token to capture body/status for diagnostics."""
+    headers = {"Authorization": f"Bearer {token}"}
+    ids_param = ",".join(ids_batch)
+    url = f"https://api.spotify.com/v1/audio-features/?ids={ids_param}"
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            return r.json().get('audio_features', [])
+        else:
+            print(f"Direct request status={r.status_code}, body={r.text[:500]}")
+            return None
+    except Exception as e:
+        print(f"Direct request error: {e}")
         return None
 
 def fetch_tracks_and_features(sp: Spotify, track_ids: List[str]) -> pd.DataFrame:
@@ -149,22 +140,18 @@ def fetch_tracks_and_features(sp: Spotify, track_ids: List[str]) -> pd.DataFrame
     unique_ids = list(dict.fromkeys([tid for tid in track_ids if tid]))
     if not unique_ids:
         return pd.DataFrame(records)
+
     # metadata
     for ids_batch in chunked(unique_ids, 50):
         retry = 0
-        max_retries = 5
-        while retry < max_retries:
+        while True:
             try:
                 tracks = sp.tracks(ids_batch).get('tracks', [])
                 break
             except Exception as e:
                 retry += 1
-                if retry >= max_retries:
-                    print(f"Error fetching tracks batch metadata after {max_retries} retries: {e}. Skipping batch.")
-                    tracks = []
-                    break
                 wait = min(60, 2 ** retry)
-                print(f"Error fetching tracks batch metadata: {e}. Retry {retry}/{max_retries} in {wait}s")
+                print(f"Error fetching tracks batch metadata: {e}. Retry in {wait}s")
                 time.sleep(wait)
         for t in tracks:
             if not t:
@@ -184,20 +171,46 @@ def fetch_tracks_and_features(sp: Spotify, track_ids: List[str]) -> pd.DataFrame
     if df_meta.empty:
         return df_meta
 
-    # audio features: intentamos y si falla guardamos la metadata sin features
+    # audio features: try spotipy first; if 403, try refreshing token and direct requests, then fallback
     features_rows = []
+    # obtain a token for direct requests if needed
+    try:
+        auth_manager = SpotifyClientCredentials(client_id=SPOTIPY_CLIENT_ID, client_secret=SPOTIPY_CLIENT_SECRET)
+        token_info = auth_manager.get_access_token(as_dict=True)
+        direct_token = token_info.get('access_token') if token_info and 'access_token' in token_info else None
+    except Exception:
+        direct_token = None
+
     for ids_batch in chunked(df_meta['track_id'].tolist(), 100):
-        feats = try_audio_features(sp, ids_batch, retry_on_403=True)
+        feats = try_audio_features_spotipy(sp, ids_batch)
         if feats is None:
-            print("Warning: audio_features batch failed for ids:", ids_batch[:5], "...")
-            # intentamos en modo batch de 1 para diagnosticar
-            for tid in ids_batch:
-                single = try_audio_features(sp, [tid], retry_on_403=False)
-                if single:
-                    features_rows.extend(single)
-                else:
-                    print(f"audio_features not available for track {tid}")
-            # si después de intentar singles no hay features, continuamos (no fallamos)
+            print("Got 403 or error from spotipy.audio_features; attempting refresh/retry and direct request...")
+            # try refresh by re-initializing token via requests (no printing of token)
+            if direct_token:
+                direct_feats = try_audio_features_direct(direct_token, ids_batch)
+                if direct_feats:
+                    features_rows.extend(direct_feats)
+                    continue
+            # try batch reduce: try smaller batches (e.g., 10 -> 1)
+            reduced_ok = False
+            for n in [50, 20, 10, 5, 1]:
+                for small_batch in chunked(ids_batch, n):
+                    sf = try_audio_features_spotipy(sp, small_batch)
+                    if sf:
+                        features_rows.extend([f for f in sf if f])
+                        reduced_ok = True
+                    else:
+                        # as last resort, try direct single with token if available
+                        if direct_token:
+                            single = try_audio_features_direct(direct_token, small_batch)
+                            if single:
+                                features_rows.extend([f for f in single if f])
+                                reduced_ok = True
+                if reduced_ok:
+                    break
+            if not reduced_ok:
+                print(f"Warning: audio_features batch failed for ids: {ids_batch[:5]} ...")
+                # continue (we will return metadata-only if no features collected)
         else:
             features_rows.extend([f for f in feats if f])
     df_feats = pd.DataFrame([f for f in features_rows if f])
@@ -208,7 +221,8 @@ def fetch_tracks_and_features(sp: Spotify, track_ids: List[str]) -> pd.DataFrame
     else:
         print("No audio_features collected; returning metadata only.")
         df = df_meta
-    # artist genres (intento)
+
+    # artist genres (best-effort)
     artist_genres = {}
     all_artist_ids = set()
     for ids in df.get('artist_ids', pd.Series()).dropna():
