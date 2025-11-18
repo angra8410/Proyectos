@@ -1,0 +1,10 @@
+pandas
+numpy
+spotipy
+python-dotenv
+jupyterlab
+matplotlib
+seaborn
+plotly
+scikit-learn
+tqdm
