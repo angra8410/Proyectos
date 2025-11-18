@@ -14,7 +14,7 @@ on:
       max_tracks:
         description: 'Max tracks to fetch'
         required: false
-        default: '500'
+        default: '1000'
 
 jobs:
   ingest:
