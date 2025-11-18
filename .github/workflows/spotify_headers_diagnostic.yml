@@ -1,0 +1,43 @@
+# Diagnostic workflow: obtiene token (client credentials) y muestra headers+body
+# para /audio-features/{id} y /tracks/{id}. Ejecutar manualmente desde Actions.
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup tools
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq curl
+
+      - name: Get access token (client credentials)
+        env:
+          SPOTIPY_CLIENT_ID: ${{ secrets.SPOTIPY_CLIENT_ID }}
+          SPOTIPY_CLIENT_SECRET: ${{ secrets.SPOTIPY_CLIENT_SECRET }}
+        run: |
+          RESP=$(curl -s -X POST -u "${SPOTIPY_CLIENT_ID}:${SPOTIPY_CLIENT_SECRET}" -d grant_type=client_credentials https://accounts.spotify.com/api/token)
+          echo "Token response keys: $(echo "$RESP" | jq -r 'keys | join(", ")')"
+          ACCESS_TOKEN=$(echo "$RESP" | jq -r '.access_token // empty')
+          echo "ACCESS_TOKEN length: ${#ACCESS_TOKEN}"
+          if [ -z "$ACCESS_TOKEN" ]; then
+            echo "ERROR: no access_token obtained; response:"
+            echo "$RESP"
+            exit 1
+          fi
+          echo "ACCESS_TOKEN=${ACCESS_TOKEN}" >> $GITHUB_ENV
+
+      - name: Diagnostic: request headers + body for audio-features and tracks
+        env:
+          ACCESS_TOKEN: ${{ env.ACCESS_TOKEN }}
+        run: |
+          TRACK_ID="3AJwUDP919kvQ9QcozQPxg"
+          AF_URL="https://api.spotify.com/v1/audio-features/${TRACK_ID}"
+          TR_URL="https://api.spotify.com/v1/tracks/${TRACK_ID}"
+
+          echo "=== AUDIO-FEATURES: request and response headers/body ==="
+          # -D - prints response headers, -s silent, output goes to stdout
+          curl -s -D - -H "Authorization: Bearer ${ACCESS_TOKEN}" "${AF_URL}" | sed -n '1,200p'
+          echo -e "\n\n=== TRACKS: request and response headers/body ==="
+          curl -s -D - -H "Authorization: Bearer ${ACCESS_TOKEN}" "${TR_URL}" | sed -n '1,200p'
