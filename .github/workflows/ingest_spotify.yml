@@ -1,4 +1,4 @@
-name: 01-EDA — Ingest Spotify tracks
+name: 01-EDA — Ingest Spotify tracks (robust path)
 
 on:
   workflow_dispatch:
@@ -23,6 +23,14 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Debug repo tree (for troubleshooting paths)
+        run: |
+          echo "WORKSPACE: $(pwd)"
+          echo "Top-level files/folders:"
+          ls -la
+          echo "Recursive tree (limited):"
+          ls -R | sed -n '1,200p'
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -31,30 +39,59 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r 01_EDA_Canciones/requirements.txt
+          # try common locations, fallback to requirements in root if none found
+          if [ -f "01_EDA_Canciones/requirements.txt" ]; then
+            pip install -r 01_EDA_Canciones/requirements.txt
+          elif [ -f "Proyectos/01_EDA_Canciones/requirements.txt" ]; then
+            pip install -r Proyectos/01_EDA_Canciones/requirements.txt
+          elif [ -f "Proyecto/01_EDA_Canciones/requirements.txt" ]; then
+            pip install -r Proyecto/01_EDA_Canciones/requirements.txt
+          elif [ -f "projects/01_EDA_Canciones/requirements.txt" ]; then
+            pip install -r projects/01_EDA_Canciones/requirements.txt
+          elif [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt
+          else
+            echo "No requirements.txt found in expected locations; installing minimal deps"
+            pip install pandas spotipy python-dotenv tqdm
+          fi
 
       - name: Create .env from secrets
         run: |
-          cat > .env <<EOF
+          cat > .env <<'EOF'
           SPOTIPY_CLIENT_ID=${{ secrets.SPOTIPY_CLIENT_ID }}
           SPOTIPY_CLIENT_SECRET=${{ secrets.SPOTIPY_CLIENT_SECRET }}
           MAX_TRACKS=${{ secrets.MAX_TRACKS }}
           EOF
 
-      - name: Run ingest script
+      - name: Locate and run ingest script
         env:
           SPOTIPY_CLIENT_ID: ${{ secrets.SPOTIPY_CLIENT_ID }}
           SPOTIPY_CLIENT_SECRET: ${{ secrets.SPOTIPY_CLIENT_SECRET }}
         run: |
-          mkdir -p 01_EDA_Canciones/src/data
-          python 01_EDA_Canciones/src/scripts/ingest_spotify.py \
+          echo "Searching for ingest_spotify.py ..."
+          SCRIPT_PATH=$(find . -maxdepth 6 -type f -name ingest_spotify.py | head -n 1 || true)
+          if [ -z "$SCRIPT_PATH" ]; then
+            echo "ERROR: ingest_spotify.py not found in repo (searched up to depth 6). Listing tree for debugging:"
+            ls -R | sed -n '1,400p'
+            exit 2
+          fi
+          echo "Found script at: $SCRIPT_PATH"
+          # create output dir relative to repo root (adjust if your project subfolder is different)
+          OUT_DIR="$(dirname "$SCRIPT_PATH")/../data"
+          mkdir -p "$OUT_DIR"
+          # normalize OUT_CSV path
+          OUT_CSV="$OUT_DIR/spotify_tracks.csv"
+          echo "Running: python $SCRIPT_PATH --playlists \"${{ github.event.inputs.playlists }}\" --artists \"${{ github.event.inputs.artists }}\" --out \"$OUT_CSV\" --max_tracks ${{ github.event.inputs.max_tracks }}"
+          python "$SCRIPT_PATH" \
             --playlists "${{ github.event.inputs.playlists }}" \
             --artists "${{ github.event.inputs.artists }}" \
-            --out 01_EDA_Canciones/src/data/spotify_tracks.csv \
+            --out "$OUT_CSV" \
             --max_tracks ${{ github.event.inputs.max_tracks }}
+          echo "Script exit code: $?"
 
-      - name: Upload CSV artifact
+      - name: Upload CSV artifact (if exists)
         uses: actions/upload-artifact@v4
         with:
           name: spotify_tracks_csv
-          path: 01_EDA_Canciones/src/data/spotify_tracks.csv
+          path: |
+            **/spotify_tracks.csv
