@@ -2,24 +2,25 @@
 """
 Descarga metadata y audio_features desde Spotify y guarda CSV.
 Soporta:
- - playlists (lista de playlist ids)
+ - playlists (lista de playlist ids o URLs)
  - artistas (por nombre: toma top tracks)
  - archivo de track ids (one id per line)
-Uso:
-  python src/scripts/ingest_spotify.py --playlists 37i9dQZF1DXcBWIGoYBM5M --out src/data/spotify_tracks.csv --max_tracks 200
-  python src/scripts/ingest_spotify.py --artists "Adele,Coldplay" --out src/data/spotify_tracks.csv
-  python src/scripts/ingest_spotify.py --track_ids_file track_ids.txt --out src/data/spotify_tracks.csv
+
+Mejoras:
+ - acepta playlist URL o id
+ - captura errores 404 (playlist no encontrada) y no explota el proceso
+ - crea la carpeta de salida relativa al script si no existe
 """
 import os
 import argparse
 import time
+import re
 from typing import List
 import pandas as pd
 from dotenv import load_dotenv
 from spotipy import Spotify
 from spotipy.oauth2 import SpotifyClientCredentials
-
-from tqdm import tqdm
+from spotipy.exceptions import SpotifyException
 
 load_dotenv()
 
@@ -36,9 +37,55 @@ def init_spotify():
     sp = Spotify(auth_manager=auth_manager, requests_timeout=10, retries=3)
     return sp
 
+def extract_playlist_id(input_str: str) -> str:
+    """
+    Dado un id o una URL/URI de playlist, devuelve solo el id.
+    Examples:
+      https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M -> 37i9dQZF1DXcBWIGoYBM5M
+      spotify:playlist:37i9dQZF1DXcBWIGoYBM5M -> 37i9dQZF1DXcBWIGoYBM5M
+    """
+    if not input_str:
+        return ""
+    input_str = input_str.strip()
+    # Buscar patrón playlist/<id>
+    m = re.search(r'(?:playlist/|spotify:playlist:)([A-Za-z0-9]+)', input_str)
+    if m:
+        return m.group(1)
+    # Si solo es un id (alfanumérico), devolverlo
+    simple = re.match(r'^[A-Za-z0-9]+$', input_str)
+    if simple:
+        return input_str
+    # Fallback: devolver lo mismo (podría fallar al llamar API)
+    return input_str
+
 def get_playlist_track_ids(sp: Spotify, playlist_id: str, limit=1000) -> List[str]:
+    """
+    Obtiene los track ids de una playlist.
+    Maneja playlists públicas; si la playlist no existe / no es accesible devuelve [] y printa un mensaje.
+    """
+    pid = extract_playlist_id(playlist_id)
+    if not pid:
+        print(f"Invalid playlist id or url: {playlist_id}")
+        return []
+
     track_ids = []
-    results = sp.playlist_items(playlist_id, fields='items.track.id,total,next', additional_types=['track'], limit=100)
+    try:
+        results = sp.playlist_items(pid, fields='items.track.id,total,next', additional_types=['track'], limit=100)
+    except SpotifyException as e:
+        # Manejo explícito de 404 (no encontrada) y otros errores
+        status = getattr(e, 'http_status', None)
+        if status == 404 or '404' in str(e):
+            print(f"Playlist not found or not accessible (404) for id/url: {playlist_id} (extracted id: {pid}). Skipping.")
+            return []
+        else:
+            print(f"SpotifyException when fetching playlist {pid}: {e}")
+            # Rethrow para errores inesperados
+            raise
+    except Exception as e:
+        # Capturar otros errores de requests/timeout
+        print(f"Error fetching playlist {pid}: {e}")
+        return []
+
     items = results.get('items', [])
     for item in items:
         tid = item.get('track', {}).get('id')
@@ -46,10 +93,15 @@ def get_playlist_track_ids(sp: Spotify, playlist_id: str, limit=1000) -> List[st
             track_ids.append(tid)
         if len(track_ids) >= limit:
             break
+
+    # páginas adicionales
     while results.get('next') and len(track_ids) < limit:
-        results = sp.next(results)
-        items = results.get('items', [])
-        for item in items:
+        try:
+            results = sp.next(results)
+        except SpotifyException as e:
+            print(f"Error paginating playlist {pid}: {e}")
+            break
+        for item in results.get('items', []):
             tid = item.get('track', {}).get('id')
             if tid:
                 track_ids.append(tid)
@@ -61,6 +113,7 @@ def get_artist_top_tracks_by_name(sp: Spotify, artist_name: str, country='US') -
     results = sp.search(q=f'artist:{artist_name}', type='artist', limit=1)
     items = results.get('artists', {}).get('items', [])
     if not items:
+        print(f"Artist not found: {artist_name}")
         return []
     artist_id = items[0]['id']
     top = sp.artist_top_tracks(artist_id, country=country)
@@ -73,6 +126,9 @@ def chunked(iterable, n):
 def fetch_tracks_and_features(sp: Spotify, track_ids: List[str]) -> pd.DataFrame:
     records = []
     unique_ids = list(dict.fromkeys([tid for tid in track_ids if tid]))
+    if not unique_ids:
+        return pd.DataFrame(records)
+
     # metadata
     for ids_batch in chunked(unique_ids, 50):
         retry = 0
@@ -140,6 +196,7 @@ def fetch_tracks_and_features(sp: Spotify, track_ids: List[str]) -> pd.DataFrame
             artists = sp.artists(aid_chunk).get('artists', [])
         except Exception as e:
             artists = []
+            print(f"Warning: error fetching artist batch {aid_chunk}: {e}")
         for art in artists:
             artist_genres[art['id']] = art.get('genres', [])
     def get_primary_genre(artist_ids_str):
@@ -156,7 +213,7 @@ def fetch_tracks_and_features(sp: Spotify, track_ids: List[str]) -> pd.DataFrame
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--playlists", help="Comma separated playlist ids (spotify playlist id, not full url)", default=None)
+    parser.add_argument("--playlists", help="Comma separated playlist ids or URLs", default=None)
     parser.add_argument("--artists", help="Comma separated artist names", default=None)
     parser.add_argument("--track_ids_file", help="File with track ids (one per line)", default=None)
     parser.add_argument("--out", help="Output CSV path", default="src/data/spotify_tracks.csv")
@@ -195,7 +252,7 @@ def main():
 
     track_ids = list(dict.fromkeys([t for t in track_ids if t]))
     if not track_ids:
-        print("No track ids collected. Exiting.")
+        print("No track ids collected. Exiting without error. Try using --artists or a different playlist id/url.")
         return
 
     if len(track_ids) > args.max_tracks:
@@ -204,9 +261,14 @@ def main():
 
     print(f"Total unique tracks to fetch: {len(track_ids)}")
     df = fetch_tracks_and_features(sp, track_ids)
-    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    df.to_csv(args.out, index=False)
-    print(f"Saved {len(df)} records to {args.out}")
+
+    # asegurar que la carpeta de salida existe
+    out_path = args.out
+    out_dir = os.path.dirname(out_path) or "."
+    os.makedirs(out_dir, exist_ok=True)
+
+    df.to_csv(out_path, index=False)
+    print(f"Saved {len(df)} records to {out_path}")
 
 if __name__ == "__main__":
     main()
