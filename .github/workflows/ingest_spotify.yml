@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r projects/01_EDA_Canciones/requirements.txt
+          pip install -r Proyectos/01_EDA_Canciones/requirements.txt
 
       - name: Create .env from secrets
         run: |
@@ -46,15 +46,15 @@ jobs:
           SPOTIPY_CLIENT_ID: ${{ secrets.SPOTIPY_CLIENT_ID }}
           SPOTIPY_CLIENT_SECRET: ${{ secrets.SPOTIPY_CLIENT_SECRET }}
         run: |
-          mkdir -p projects/01_EDA_Canciones/src/data
-          python projects/01_EDA_Canciones/src/scripts/ingest_spotify.py \
+          mkdir -p Proyectos/01_EDA_Canciones/src/data
+          python Proyectos/01_EDA_Canciones/src/scripts/ingest_spotify.py \
             --playlists "${{ github.event.inputs.playlists }}" \
             --artists "${{ github.event.inputs.artists }}" \
-            --out projects/01_EDA_Canciones/src/data/spotify_tracks.csv \
+            --out Proyectos/01_EDA_Canciones/src/data/spotify_tracks.csv \
             --max_tracks ${{ github.event.inputs.max_tracks }}
 
       - name: Upload CSV artifact
         uses: actions/upload-artifact@v4
         with:
           name: spotify_tracks_csv
-          path: projects/01_EDA_Canciones/src/data/spotify_tracks.csv
+          path: Proyectos/01_EDA_Canciones/src/data/spotify_tracks.csv
