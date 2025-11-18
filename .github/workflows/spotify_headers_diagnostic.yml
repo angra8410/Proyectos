@@ -26,19 +26,15 @@ jobs:
             echo "$RESP"
             exit 1
           fi
-          # export to subsequent steps
           echo "ACCESS_TOKEN=${ACCESS_TOKEN}" >> $GITHUB_ENV
 
       - name: Diagnostic: request headers + body for audio-features and tracks
-        # Do NOT reference ${{ env.ACCESS_TOKEN }} here; ACCESS_TOKEN will be available
-        # at runtime via $ACCESS_TOKEN because it was written to $GITHUB_ENV in the previous step.
         run: |
           TRACK_ID="3AJwUDP919kvQ9QcozQPxg"
           AF_URL="https://api.spotify.com/v1/audio-features/${TRACK_ID}"
           TR_URL="https://api.spotify.com/v1/tracks/${TRACK_ID}"
 
           echo "=== AUDIO-FEATURES: request and response headers/body ==="
-          # -D - prints response headers, -s silent, output goes to stdout
           curl -s -D - -H "Authorization: Bearer ${ACCESS_TOKEN}" "${AF_URL}" | sed -n '1,200p'
           echo -e "\n\n=== TRACKS: request and response headers/body ==="
           curl -s -D - -H "Authorization: Bearer ${ACCESS_TOKEN}" "${TR_URL}" | sed -n '1,200p'
