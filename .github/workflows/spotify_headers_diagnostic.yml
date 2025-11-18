@@ -36,5 +36,6 @@ jobs:
 
           echo "=== AUDIO-FEATURES: request and response headers/body ==="
           curl -s -D - -H "Authorization: Bearer ${ACCESS_TOKEN}" "${AF_URL}" | sed -n '1,200p'
-          echo -e "\n\n=== TRACKS: request and response headers/body ==="
+          echo ""
+          echo "=== TRACKS: request and response headers/body ==="
           curl -s -D - -H "Authorization: Bearer ${ACCESS_TOKEN}" "${TR_URL}" | sed -n '1,200p'
