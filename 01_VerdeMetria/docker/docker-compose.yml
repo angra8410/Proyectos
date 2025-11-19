@@ -1,0 +1,77 @@
+# Docker Compose Configuration for VerdeMetria
+# 
+# This is an OPTIONAL configuration for advanced users who want to run
+# supporting services (Airflow, PostGIS, MinIO) in containers.
+#
+# Basic usage (local scripts) does NOT require Docker.
+
+version: '3.8'
+
+services:
+  # Uncomment sections below if you want to use these services
+
+  # PostgreSQL with PostGIS extension
+  # Useful for storing metadata, AOIs, and analysis results
+  # postgres:
+  #   image: postgis/postgis:15-3.3
+  #   environment:
+  #     POSTGRES_USER: verdemetria
+  #     POSTGRES_PASSWORD: changeme
+  #     POSTGRES_DB: verdemetria
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+
+  # MinIO - S3-compatible object storage
+  # Useful for storing large raster files in a cloud-like environment
+  # minio:
+  #   image: minio/minio:latest
+  #   command: server /data --console-address ":9001"
+  #   environment:
+  #     MINIO_ROOT_USER: minio
+  #     MINIO_ROOT_PASSWORD: changeme123
+  #   ports:
+  #     - "9000:9000"   # S3 API
+  #     - "9001:9001"   # Web console
+  #   volumes:
+  #     - minio_data:/data
+
+  # Apache Airflow (simplified single-node setup)
+  # For production, use the official Airflow docker-compose:
+  # https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html
+  # 
+  # airflow:
+  #   image: apache/airflow:2.7.0
+  #   environment:
+  #     AIRFLOW__CORE__EXECUTOR: LocalExecutor
+  #     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://verdemetria:changeme@postgres/verdemetria
+  #     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+  #   depends_on:
+  #     - postgres
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - ./dags:/opt/airflow/dags
+  #     - ./data:/opt/airflow/data
+  #     - ./outputs:/opt/airflow/outputs
+  #   command: >
+  #     bash -c "
+  #       airflow db init &&
+  #       airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com &&
+  #       airflow webserver & airflow scheduler
+  #     "
+
+# Volumes for persistent data
+# volumes:
+#   postgres_data:
+#   minio_data:
+
+# To use this configuration:
+# 1. Uncomment the services you want to use
+# 2. Change default passwords!
+# 3. Run: docker-compose up -d
+# 4. Access services:
+#    - MinIO Console: http://localhost:9001
+#    - Airflow UI: http://localhost:8080
+#    - PostgreSQL: localhost:5432
