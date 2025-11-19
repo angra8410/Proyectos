@@ -1,0 +1,58 @@
+name: CI - Tests
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - 'feature/**'
+      - 'feat/**'
+  pull_request:
+    branches:
+      - main
+      - dev
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Miniconda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        miniforge-version: latest
+        activate-environment: ndvi
+        environment-file: 01_VerdeMetria/environment.yml
+        python-version: '3.10'
+        auto-activate-base: false
+        use-mamba: true
+    
+    - name: Verify environment
+      shell: bash -el {0}
+      run: |
+        conda info
+        conda list
+        which python
+        python --version
+    
+    - name: Run tests
+      shell: bash -el {0}
+      run: |
+        cd 01_VerdeMetria
+        python -m pytest tests/ -v --tb=short
+    
+    - name: Test scripts help
+      shell: bash -el {0}
+      run: |
+        cd 01_VerdeMetria
+        python scripts/ndvi_compute.py --help
+        python scripts/ndvi_diff_area.py --help
+    
+    - name: Check imports
+      shell: bash -el {0}
+      run: |
+        cd 01_VerdeMetria
+        python -c "import sys; sys.path.insert(0, 'src'); from verdemetria import compute_ndvi_array, read_raster; print('✓ Imports successful')"
