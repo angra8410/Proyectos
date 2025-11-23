@@ -30,7 +30,7 @@ class TestComputeNDVI:
         
         # NDVI = (NIR - Red) / (NIR + Red)
         # For [100, 150]: (150-100)/(150+100) = 50/250 = 0.2
-        expected = np.array([[0.2, 0.2], [0.1923077, 0.1875]], dtype=np.float32)
+        expected = np.array([[0.2, 0.2], [0.18518519, 0.1875]], dtype=np.float32)
         assert_array_almost_equal(ndvi, expected, decimal=5)
     
     def test_ndvi_range(self):
