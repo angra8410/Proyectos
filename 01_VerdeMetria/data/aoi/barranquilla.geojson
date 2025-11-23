@@ -1,0 +1,24 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Bogotá Sample AOI",
+        "description": "Small sample area for testing NDVI workflows"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-74.1, 4.6],
+            [-74.1, 4.65],
+            [-74.05, 4.65],
+            [-74.05, 4.6],
+            [-74.1, 4.6]
+          ]
+        ]
+      }
+    }
+  ]
+}
