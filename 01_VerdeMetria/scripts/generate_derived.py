@@ -337,16 +337,24 @@ def generate_choropleth_html(
             tooltip_fields.append(value_col)
             tooltip_aliases.append('Área (ha)')
         
-        # Add GeoJSON layer
-        geojson_layer_args = {
-            'data': geojson_data,
-            'name': 'Municipios',
-            'style_function': lambda feat: {
-                'fillColor': _get_color(feat.get('properties', {}).get(value_col, 0) if value_col else 0),
+        def get_feature_style(feature, val_col=value_col):
+            """Get style dict for a GeoJSON feature."""
+            value = 0
+            if val_col:
+                props = feature.get('properties', {})
+                value = props.get(val_col, 0)
+            return {
+                'fillColor': _get_color(value),
                 'color': '#444',
                 'weight': 0.5,
                 'fillOpacity': 0.6
             }
+        
+        # Add GeoJSON layer
+        geojson_layer_args = {
+            'data': geojson_data,
+            'name': 'Municipios',
+            'style_function': get_feature_style
         }
         
         if tooltip_fields:
@@ -492,8 +500,8 @@ def generate_sample_data(output_dir: Path) -> bool:
     for year in [2020, 2021, 2022, 2023, 2024, 2025]:
         for kind in ['gain', 'loss']:
             for i, muni in enumerate(municipios):
-                # Generate random-ish but consistent values
-                base = (hash(muni + str(year) + kind) % 1000) / 10
+                # Generate random-ish but consistent positive values
+                base = abs(hash(muni + str(year) + kind)) % 1000 / 10
                 rows.append({
                     'NAME_2': muni,
                     'year': year,

@@ -32,6 +32,44 @@ from urllib.parse import urlparse, unquote
 logger = logging.getLogger(__name__)
 
 
+def _is_valid_onedrive_url(url: str) -> bool:
+    """
+    Validate that a URL is a legitimate OneDrive/SharePoint URL.
+    
+    Uses proper URL parsing to ensure the domain is actually from Microsoft,
+    not just containing the substring (e.g., avoids evil.sharepoint.com.attacker.com).
+    
+    Args:
+        url: URL to validate
+        
+    Returns:
+        bool: True if URL is a valid OneDrive/SharePoint URL
+    """
+    try:
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        
+        # Valid OneDrive/SharePoint domains
+        valid_domains = [
+            "1drv.ms",
+            "onedrive.live.com",
+            "onedrive.com",
+        ]
+        
+        # Check exact match for simple domains
+        if host in valid_domains:
+            return True
+        
+        # Check for SharePoint domains (*.sharepoint.com)
+        # Must end with .sharepoint.com to be legitimate
+        if host.endswith(".sharepoint.com") or host == "sharepoint.com":
+            return True
+        
+        return False
+    except Exception:
+        return False
+
+
 def download_public_onedrive(public_link: str, dest: str, timeout: int = 120) -> bool:
     """
     Download a file from a public OneDrive/SharePoint link.
@@ -47,54 +85,54 @@ def download_public_onedrive(public_link: str, dest: str, timeout: int = 120) ->
         bool: True if download succeeded, False otherwise
     """
     try:
-        # Convert 1drv.ms short links to download URL
-        # OneDrive public links can be converted by changing 'redir' to 'download'
-        # or by using the sharing API trick
+        # Validate the URL is a legitimate OneDrive/SharePoint URL
+        if not _is_valid_onedrive_url(public_link):
+            logger.warning(f"URL is not a valid OneDrive/SharePoint link: {public_link}")
+            return False
         
-        if "1drv.ms" in public_link or "sharepoint.com" in public_link:
-            # Try direct download approach - follow redirects
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-            
-            # Method 1: Direct redirect following
-            response = requests.get(
-                public_link, 
-                headers=headers, 
-                allow_redirects=True,
-                timeout=timeout,
-                stream=True
-            )
-            
-            # Check if we got a download or need to modify URL
-            content_type = response.headers.get("Content-Type", "")
-            
-            if "text/html" in content_type:
-                # We got HTML page, try to extract download URL
-                # or convert link format
-                download_url = _convert_to_download_url(public_link)
-                if download_url:
-                    response = requests.get(
-                        download_url,
-                        headers=headers,
-                        allow_redirects=True,
-                        timeout=timeout,
-                        stream=True
-                    )
-            
-            response.raise_for_status()
-            
-            # Ensure parent directory exists
-            os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
-            
-            # Write file
-            with open(dest, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            
-            logger.info(f"Downloaded {dest} from public link")
-            return True
+        # Try direct download approach - follow redirects
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+        
+        # Method 1: Direct redirect following
+        response = requests.get(
+            public_link, 
+            headers=headers, 
+            allow_redirects=True,
+            timeout=timeout,
+            stream=True
+        )
+        
+        # Check if we got a download or need to modify URL
+        content_type = response.headers.get("Content-Type", "")
+        
+        if "text/html" in content_type:
+            # We got HTML page, try to extract download URL
+            # or convert link format
+            download_url = _convert_to_download_url(public_link)
+            if download_url:
+                response = requests.get(
+                    download_url,
+                    headers=headers,
+                    allow_redirects=True,
+                    timeout=timeout,
+                    stream=True
+                )
+        
+        response.raise_for_status()
+        
+        # Ensure parent directory exists
+        os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+        
+        # Write file
+        with open(dest, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+        
+        logger.info(f"Downloaded {dest} from public link")
+        return True
             
     except requests.RequestException as e:
         logger.warning(f"Public download failed: {e}")
@@ -109,17 +147,21 @@ def _convert_to_download_url(share_link: str) -> str:
     Convert a OneDrive share link to a direct download URL.
     
     Uses the base64 encoding trick for OneDrive sharing links.
+    
+    OneDrive sharing API expects the share URL to be encoded in a specific format:
+    1. Base64 URL-safe encode the sharing URL
+    2. Remove trailing '=' padding characters
+    3. Prefix with 'u!' to indicate an encoded sharing URL
+    
+    Reference: https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/shares_get
     """
     try:
-        # Method: Base64 encode the share URL and create API URL
-        # This works for personal OneDrive links
-        
-        # Encode the sharing URL
+        # Encode the sharing URL using URL-safe base64
         encoded = base64.urlsafe_b64encode(share_link.encode()).decode()
-        # Remove padding and prefix with 'u!'
+        # Remove padding ('=') and add 'u!' prefix per OneDrive sharing API spec
         encoded = "u!" + encoded.rstrip("=")
         
-        # Construct the download URL
+        # Construct the download URL using OneDrive API
         download_url = f"https://api.onedrive.com/v1.0/shares/{encoded}/root/content"
         
         return download_url
@@ -190,8 +232,9 @@ def download_graph_share(
             return False
         
         # Download the file
-        # Note: @microsoft.graph.downloadUrl doesn't need auth header
-        if "@microsoft.graph.downloadUrl" in str(download_url):
+        # Pre-authenticated URLs from @microsoft.graph.downloadUrl don't need auth headers
+        is_preauthenticated = download_url.startswith("https://") and "download" in download_url.lower()
+        if is_preauthenticated:
             dl_response = requests.get(download_url, timeout=timeout, stream=True)
         else:
             dl_response = requests.get(download_url, headers=headers, timeout=timeout, stream=True)

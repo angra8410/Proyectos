@@ -58,7 +58,10 @@ def get_secret(key: str, default: str = None) -> str:
     try:
         if hasattr(st, 'secrets') and key in st.secrets:
             return st.secrets[key]
-    except Exception:
+    except (KeyError, AttributeError, FileNotFoundError):
+        # KeyError: key not in secrets
+        # AttributeError: secrets not properly initialized
+        # FileNotFoundError: secrets.toml doesn't exist
         pass
     
     # Fall back to environment variable
