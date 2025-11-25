@@ -1,7 +1,16 @@
 # Data files and outputs
 data/raw/
 data/processed/
-outputs/
+
+# Heavy outputs (kept gitignored)
+outputs/*.tif
+outputs/*.tiff
+outputs/*.gpkg
+outputs/raw/
+
+# Light outputs are committed (CSV, GeoJSON, HTML, PNG)
+# This allows the Streamlit app to work without OneDrive in simple deployments
+
 *.tif
 *.tiff
 

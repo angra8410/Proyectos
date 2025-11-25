@@ -4,3 +4,4 @@ folium
 streamlit-folium
 matplotlib
 seaborn
+requests>=2.28
