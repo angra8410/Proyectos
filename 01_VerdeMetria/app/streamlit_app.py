@@ -2,41 +2,147 @@
 """
 Streamlit app ligera para mostrar los resultados NDVI desde outputs/.
 Ruta esperada para datos: ../outputs (relativo a esta app).
+
+Features:
+- Automatic download from OneDrive if local files don't exist
+- Support for public links and Graph API authentication
+- Data caching with st.cache_data
 """
 import os
+import sys
 import json
+import logging
 import streamlit as st
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
 
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Rutas relativas (funciona estando el archivo en 01_VerdeMetria/app/)
 BASE_DIR = os.path.dirname(__file__)                # .../01_VerdeMetria/app
 PROJECT_DIR = os.path.abspath(os.path.join(BASE_DIR, '..'))  # .../01_VerdeMetria
+SCRIPTS_DIR = os.path.join(PROJECT_DIR, 'scripts')
 OUT = os.path.join(PROJECT_DIR, 'outputs')
 CSV_AREAS = os.path.join(OUT, 'areas_by_sector_vs_2016.csv')
 CSV_AREAS_FILTERED = os.path.join(OUT, 'areas_by_sector_vs_2016_filtered.csv')
 GEOJSON_YEAR = os.path.join(OUT, 'areas_by_municipio_2025.geojson')  # ejemplo
 CHOROPLETH_HTML = os.path.join(OUT, 'choropleth_cumulative_pct.html')
 
+# Add scripts to path for OneDrive helper
+if SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, SCRIPTS_DIR)
+
+# Import OneDrive helper
+try:
+    from download_from_onedrive import ensure_file_local
+    HAS_ONEDRIVE_HELPER = True
+except ImportError:
+    HAS_ONEDRIVE_HELPER = False
+    logger.warning("OneDrive helper not available - downloads disabled")
+
+
+def get_secret(key: str, default: str = None) -> str:
+    """
+    Get a secret from Streamlit secrets or environment variables.
+    
+    Priority:
+    1. Streamlit secrets (st.secrets)
+    2. Environment variables
+    3. Default value
+    """
+    # Try Streamlit secrets first
+    try:
+        if hasattr(st, 'secrets') and key in st.secrets:
+            return st.secrets[key]
+    except (KeyError, AttributeError, FileNotFoundError):
+        # KeyError: key not in secrets
+        # AttributeError: secrets not properly initialized
+        # FileNotFoundError: secrets.toml doesn't exist
+        pass
+    
+    # Fall back to environment variable
+    return os.environ.get(key, default)
+
+
+def ensure_output_file(filename: str, public_url_key: str = None, share_url_key: str = None) -> str:
+    """
+    Ensure an output file exists locally, downloading from OneDrive if needed.
+    
+    Args:
+        filename: Name of file in outputs directory
+        public_url_key: Secret key for public OneDrive URL
+        share_url_key: Secret key for OneDrive share URL (Graph API)
+        
+    Returns:
+        str: Full path to file if exists, None otherwise
+    """
+    filepath = os.path.join(OUT, filename)
+    
+    # If file already exists, return it
+    if os.path.exists(filepath):
+        return filepath
+    
+    # Try to download if helper is available
+    if not HAS_ONEDRIVE_HELPER:
+        return None
+    
+    # Get credentials from secrets
+    public_url = get_secret(public_url_key) if public_url_key else get_secret('ONEDRIVE_PUBLIC_LINK')
+    share_url = get_secret(share_url_key) if share_url_key else get_secret('ONEDRIVE_SHARE_URL')
+    tenant_id = get_secret('ONEDRIVE_TENANT_ID')
+    client_id = get_secret('ONEDRIVE_CLIENT_ID')
+    client_secret = get_secret('ONEDRIVE_CLIENT_SECRET')
+    
+    # Ensure outputs directory exists
+    os.makedirs(OUT, exist_ok=True)
+    
+    # Try to download
+    try:
+        success = ensure_file_local(
+            filepath=filepath,
+            public_url=public_url,
+            share_url=share_url,
+            tenant_id=tenant_id,
+            client_id=client_id,
+            client_secret=client_secret
+        )
+        
+        if success and os.path.exists(filepath):
+            logger.info(f"Downloaded {filename} from OneDrive")
+            return filepath
+            
+    except Exception as e:
+        logger.warning(f"Failed to download {filename}: {e}")
+    
+    return None
+
 st.set_page_config(layout="wide", page_title="NDVI Changes Explorer")
 
 st.title("NDVI Changes Explorer — pérdidas/ganancias vs 2016")
 st.markdown("Interactivo (datos desde carpeta outputs/ del proyecto)")
 
-@st.cache_data
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_csv(path):
     if not os.path.exists(path):
         return None
     return pd.read_csv(path)
 
-@st.cache_data
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_geojson(path):
     if not os.path.exists(path):
         return None
     with open(path, 'r', encoding='utf-8') as f:
         return json.load(f)
+
+
+# Ensure required files exist (with OneDrive fallback)
+ensure_output_file('areas_by_sector_vs_2016.csv', 'ONEDRIVE_CSV_URL')
+ensure_output_file('areas_by_sector_vs_2016_filtered.csv', 'ONEDRIVE_CSV_FILTERED_URL')
+ensure_output_file('areas_by_municipio_2025.geojson', 'ONEDRIVE_GEOJSON_URL')
 
 # cargar datos (prefiere filtrado si existe)
 df = load_csv(CSV_AREAS_FILTERED) or load_csv(CSV_AREAS)

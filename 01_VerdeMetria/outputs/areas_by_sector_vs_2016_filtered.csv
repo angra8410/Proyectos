@@ -1,0 +1,121 @@
+NAME_2,year,kind,area_ha,area_m2
+Barranquilla,2020,gain,49.2,492000.0
+Soledad,2020,gain,30.3,303000.0
+Malambo,2020,gain,14.2,142000.0
+Galapa,2020,gain,34.2,342000.0
+Puerto Colombia,2020,gain,21.8,218000.0
+Sabanalarga,2020,gain,41.1,411000.0
+Baranoa,2020,gain,59.1,591000.0
+Polonuevo,2020,gain,84.1,841000.0
+Santo Tomás,2020,gain,7.1,71000.0
+Palmar de Varela,2020,gain,32.6,326000.0
+Barranquilla,2020,loss,99.0,990000.0
+Soledad,2020,loss,89.2,892000.0
+Malambo,2020,loss,93.9,939000.0
+Galapa,2020,loss,35.7,357000.0
+Puerto Colombia,2020,loss,81.6,816000.0
+Sabanalarga,2020,loss,64.0,640000.0
+Baranoa,2020,loss,32.3,323000.0
+Polonuevo,2020,loss,87.8,878000.0
+Santo Tomás,2020,loss,55.1,551000.0
+Palmar de Varela,2020,loss,59.6,596000.0
+Barranquilla,2021,gain,24.9,249000.0
+Soledad,2021,gain,38.9,389000.0
+Malambo,2021,gain,65.3,653000.0
+Galapa,2021,gain,69.1,691000.0
+Puerto Colombia,2021,gain,99.6,996000.0
+Sabanalarga,2021,gain,55.0,550000.0
+Baranoa,2021,gain,42.8,428000.0
+Polonuevo,2021,gain,84.5,845000.0
+Santo Tomás,2021,gain,85.9,859000.0
+Palmar de Varela,2021,gain,49.2,492000.0
+Barranquilla,2021,loss,92.1,921000.0
+Soledad,2021,loss,11.8,118000.0
+Malambo,2021,loss,63.4,634000.0
+Galapa,2021,loss,65.6,656000.0
+Puerto Colombia,2021,loss,20.0,200000.0
+Sabanalarga,2021,loss,38.6,386000.0
+Baranoa,2021,loss,16.2,162000.0
+Polonuevo,2021,loss,61.6,616000.0
+Santo Tomás,2021,loss,46.3,463000.0
+Palmar de Varela,2021,loss,10.9,109000.0
+Barranquilla,2022,gain,8.3,83000.0
+Soledad,2022,gain,19.4,194000.0
+Malambo,2022,gain,23.6,236000.0
+Galapa,2022,gain,35.1,351000.0
+Puerto Colombia,2022,gain,14.8,148000.0
+Sabanalarga,2022,gain,41.4,414000.0
+Baranoa,2022,gain,90.5,905000.0
+Polonuevo,2022,gain,11.2,112000.0
+Santo Tomás,2022,gain,13.7,137000.0
+Palmar de Varela,2022,gain,31.5,315000.0
+Barranquilla,2022,loss,30.8,308000.0
+Soledad,2022,loss,26.4,264000.0
+Malambo,2022,loss,47.1,471000.0
+Galapa,2022,loss,2.8,28000.0
+Puerto Colombia,2022,loss,5.7,57000.0
+Sabanalarga,2022,loss,45.9,459000.0
+Baranoa,2022,loss,24.0,240000.0
+Polonuevo,2022,loss,85.7,857000.0
+Santo Tomás,2022,loss,73.6,736000.0
+Palmar de Varela,2022,loss,37.2,372000.0
+Barranquilla,2023,gain,57.2,572000.0
+Soledad,2023,gain,4.2,42000.0
+Malambo,2023,gain,32.0,320000.0
+Galapa,2023,gain,4.5,45000.0
+Puerto Colombia,2023,gain,72.1,721000.0
+Sabanalarga,2023,gain,44.4,444000.0
+Baranoa,2023,gain,6.2,62000.0
+Polonuevo,2023,gain,79.6,796000.0
+Santo Tomás,2023,gain,97.5,975000.0
+Palmar de Varela,2023,gain,89.7,897000.0
+Barranquilla,2023,loss,72.0,720000.0
+Soledad,2023,loss,28.0,280000.0
+Malambo,2023,loss,70.7,707000.0
+Galapa,2023,loss,76.9,769000.0
+Puerto Colombia,2023,loss,5.2,52000.0
+Sabanalarga,2023,loss,96.9,969000.0
+Baranoa,2023,loss,59.4,594000.0
+Polonuevo,2023,loss,7.3,73000.0
+Santo Tomás,2023,loss,74.9,749000.0
+Palmar de Varela,2023,loss,11.0,110000.0
+Barranquilla,2024,gain,76.1,761000.0
+Soledad,2024,gain,52.5,525000.0
+Malambo,2024,gain,40.3,403000.0
+Galapa,2024,gain,30.0,300000.0
+Puerto Colombia,2024,gain,22.5,225000.0
+Sabanalarga,2024,gain,19.3,193000.0
+Baranoa,2024,gain,59.1,591000.0
+Polonuevo,2024,gain,12.0,120000.0
+Santo Tomás,2024,gain,82.4,824000.0
+Palmar de Varela,2024,gain,47.8,478000.0
+Barranquilla,2024,loss,81.0,810000.0
+Soledad,2024,loss,6.6,66000.0
+Malambo,2024,loss,58.7,587000.0
+Galapa,2024,loss,41.2,412000.0
+Puerto Colombia,2024,loss,18.6,186000.0
+Sabanalarga,2024,loss,13.3,133000.0
+Baranoa,2024,loss,38.0,380000.0
+Polonuevo,2024,loss,11.0,110000.0
+Santo Tomás,2024,loss,20.5,205000.0
+Palmar de Varela,2024,loss,32.8,328000.0
+Barranquilla,2025,gain,13.1,131000.0
+Soledad,2025,gain,96.3,963000.0
+Malambo,2025,gain,1.5,15000.0
+Galapa,2025,gain,99.1,991000.0
+Puerto Colombia,2025,gain,89.5,895000.0
+Sabanalarga,2025,gain,88.3,883000.0
+Baranoa,2025,gain,41.2,412000.0
+Polonuevo,2025,gain,95.5,955000.0
+Santo Tomás,2025,gain,21.6,216000.0
+Palmar de Varela,2025,gain,1.9,19000.0
+Barranquilla,2025,loss,82.5,825000.0
+Soledad,2025,loss,84.7,847000.0
+Malambo,2025,loss,95.9,959000.0
+Galapa,2025,loss,31.8,318000.0
+Puerto Colombia,2025,loss,93.6,936000.0
+Sabanalarga,2025,loss,98.2,982000.0
+Baranoa,2025,loss,32.5,325000.0
+Polonuevo,2025,loss,36.1,361000.0
+Santo Tomás,2025,loss,42.6,426000.0
+Palmar de Varela,2025,loss,82.1,821000.0
