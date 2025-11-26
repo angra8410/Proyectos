@@ -17,3 +17,10 @@ projects/*/src/data/*
 
 # OS
 .DS_Store
+
+# VerdeMetria: derivados y datos locales grandes
+01_VerdeMetria/outputs/
+01_VerdeMetria/data/raw/
+01_VerdeMetria/data/*.gpkg
+01_VerdeMetria/data/*.tif
+01_VerdeMetria/data/*.tiff
